@@ -5,47 +5,62 @@ const http = require("http");
 
 const PORT = 4000;
 
-const server = app.listen(PORT,()=>{
+const server = app.listen(PORT, () => {
     console.log(`Server is listening on ${PORT}... `);
-})
+});
 
 const { Server } = require('socket.io'); // Updated for Socket.io v4
 const io = new Server(server);
 
 app.use(express.static(path.join(__dirname)));
 
-let admin
-let users = 0 
-io.on("connection",(socket)=>{
-    users++;
-    console.log(`user connected, no of users : ${users}`);
+let users = 0;
+let adminSocket = null;
 
-    // Assign roles based on the number of users connected
+io.on("connection", (socket) => {
+    users++;
+
+    // Assign role based on the number of users
+    let role;
     if (users === 1) {
-        admin = 1 ;  // user 1 -> Admin / Teacher
-    } else if (users <=61) {
-        admin = 0;  // Users 2-61 -> students
+        role = "admin";
+        adminSocket = socket;
+    } else if (users <= 61) {
+        role = "student";
     } else {
-        // user > 61 -> Reject connection 
-        console.log("access denied");
+        console.log("Access denied: Only 60 students allowed.");
         socket.emit('accessDenied', 'Access is closed. Only 60 students allowed.');
         socket.disconnect();
         users--;
         return;
     }
 
-    // Send admin to frontend
-    socket.emit('admin', admin);
+    console.log(`User connected (${role}), no of users: ${users}`);
 
-    // Listen for scroll position changes
-    socket.on('scroll', (scrollTop) => {
-        socket.broadcast.emit('syncScroll', scrollTop);
+    // Send the role to the frontend
+    socket.emit('role', role);
+
+    // Listen for scroll position changes and broadcast if from admin
+    socket.on('scroll', (data) => {
+        if (data.role === "admin") {
+            socket.broadcast.emit('syncScroll', data.scrollTop);
+        }
     });
 
-    socket.on("disconnect",()=>{
-        users--;
-        console.log(`user disconnected, no of users : ${users}`);
+    // Handle disconnection
+    socket.on("disconnect", () => {
+        if (role === "admin" && socket === adminSocket) {
+            console.log('Admin disconnected, ending session for all students');
+            
+            // Disconnect all clients
+            io.sockets.sockets.forEach((clientSocket) => {
+                clientSocket.disconnect(true);
+            });
+            users = 0;  // Reset user count as all connections are closed
+            adminSocket = null;
+        } else {
+            users--;
+            console.log(`User disconnected (${role}), no of users: ${users}`);
+        }
     });
 });
-
-

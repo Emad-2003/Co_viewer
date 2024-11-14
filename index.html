@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Socket.io Client</title>
+    <title>Dashboard</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         /* Center the PDF viewer container */
@@ -18,10 +18,9 @@
 
         #pdfViewer {
             overflow-y: scroll;
-            height : 100vh;
+            height: 100vh;
             width: 80vw;  /* Adjust the width as needed */
             border: 1px solid #ddd;
-            
         }
 
         /* Center canvas inside the viewer container */
@@ -34,50 +33,52 @@
     <div id="pdfViewer" style="overflow-y: scroll; height: 600px; width: 100%; border: 1px solid #ddd;">
     </div>
 
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
     <script>
-        const socket = io(); // Automatically connects to the server
-        socket.on('connect', () => {
-            console.log('Connected to server');
-        });
-        
-        let role = ""
-        socket.on("admin",(admin)=>{
-            if (admin)
-                role = "admin"
-            else
-                role = "student"
+        const socket = io();
+        let role = "";
+
+        // Listen for the role assignment from the server
+        socket.on("role", (r) => {
+            role = r;
+            if (role === "student") {
+                // Disable scrolling for students
+                document.getElementById('pdfViewer').style.overflowY = "hidden";
+            }
         });
 
-        // Emit scroll position to the server when the user scrolls
+        // Emit scroll position to the server only if the user is the admin
         document.getElementById('pdfViewer').addEventListener('scroll', () => {
-            const scrollTop = document.getElementById('pdfViewer').scrollTop;
-            socket.emit('scroll', scrollTop);  // Send scroll position to server
+            if (role === "admin") {
+                const scrollTop = document.getElementById('pdfViewer').scrollTop;
+                socket.emit('scroll', { role, scrollTop });
+            }
         });
 
-        // Sync the scroll position when receiving from other clients
+        // Sync the scroll position when receiving from the server
         socket.on('syncScroll', (scrollTop) => {
-            document.getElementById('pdfViewer').scrollTop = scrollTop;  // Sync scroll position
+            if (role === 'student') {
+                document.getElementById('pdfViewer').scrollTop = scrollTop;
+            }
         });
 
-        socket.on("accessDenied",(data)=>{
+        // Handle access denial for excess students
+        socket.on("accessDenied", (data) => {
             document.body.innerHTML = "";
             document.write(data);
-        })
+        });
 
-        function renderPage(pdf, pageNo){
-
+        // Function to render each page of the PDF
+        function renderPage(pdf, pageNo) {
             pdf.getPage(pageNo).then(page => {
-                // Create a new canvas for each page
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
                 const viewport = page.getViewport({ scale: 1.5 });
-        
+
                 // Set canvas dimensions based on PDF page dimensions
                 canvas.width = viewport.width;
                 canvas.height = viewport.height;
-        
+
                 // Render PDF page into canvas context
                 const renderContext = {
                     canvasContext: context,
@@ -90,15 +91,15 @@
             });
         }
 
+        // Load the PDF document
         const pdfPath = "pdf.pdf";
         pdfjsLib.getDocument(pdfPath).promise.then(pdf => {
-            for(let pageNo = 1; pageNo <= pdf.numPages; pageNo++)
+            for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
                 renderPage(pdf, pageNo);
-        }).catch(error=>{
+            }
+        }).catch(error => {
             console.error("Error loading PDF:", error);
-        })
-
-
+        });
     </script>
 </body>
 </html>
