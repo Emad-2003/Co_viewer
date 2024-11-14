@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket.io Client</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        /* Center the PDF viewer container */
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #pdfViewer {
+            overflow-y: scroll;
+            height : 100vh;
+            width: 80vw;  /* Adjust the width as needed */
+            border: 1px solid #ddd;
+            
+        }
+
+        /* Center canvas inside the viewer container */
+        canvas {
+            margin: 10px auto; /* Optional: Add some space between pages */
+        }
+    </style>
+</head>
+<body>
+    <div id="pdfViewer" style="overflow-y: scroll; height: 600px; width: 100%; border: 1px solid #ddd;">
+    </div>
+
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <script>
+        const socket = io(); // Automatically connects to the server
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+        
+        let role = ""
+        socket.on("admin",(admin)=>{
+            if (admin)
+                role = "admin"
+            else
+                role = "student"
+        });
+
+        // Emit scroll position to the server when the user scrolls
+        document.getElementById('pdfViewer').addEventListener('scroll', () => {
+            const scrollTop = document.getElementById('pdfViewer').scrollTop;
+            socket.emit('scroll', scrollTop);  // Send scroll position to server
+        });
+
+        // Sync the scroll position when receiving from other clients
+        socket.on('syncScroll', (scrollTop) => {
+            document.getElementById('pdfViewer').scrollTop = scrollTop;  // Sync scroll position
+        });
+
+        socket.on("accessDenied",(data)=>{
+            document.body.innerHTML = "";
+            document.write(data);
+        })
+
+        function renderPage(pdf, pageNo){
+
+            pdf.getPage(pageNo).then(page => {
+                // Create a new canvas for each page
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                const viewport = page.getViewport({ scale: 1.5 });
+        
+                // Set canvas dimensions based on PDF page dimensions
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+        
+                // Render PDF page into canvas context
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: viewport
+                };
+                page.render(renderContext);
+
+                // Append canvas to the container
+                document.getElementById('pdfViewer').appendChild(canvas);
+            });
+        }
+
+        const pdfPath = "pdf.pdf";
+        pdfjsLib.getDocument(pdfPath).promise.then(pdf => {
+            for(let pageNo = 1; pageNo <= pdf.numPages; pageNo++)
+                renderPage(pdf, pageNo);
+        }).catch(error=>{
+            console.error("Error loading PDF:", error);
+        })
+
+
+    </script>
+</body>
+</html>
